@@ -4,9 +4,9 @@ import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Eye, EyeOff, LogIn } from 'lucide-react'
+import { Eye, EyeOff, LogIn, ArrowLeft } from 'lucide-react'
 
-const Login = ({ onLogin }) => {
+const Login = ({ onLogin, onBackToLanding, onGoToRegister }) => {
   const [formData, setFormData] = useState({
     email: '',
     password: ''
@@ -57,6 +57,12 @@ const Login = ({ onLogin }) => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1">
+          <div className="flex items-center justify-between">
+            <Button variant="ghost" size="sm" onClick={onBackToLanding}>
+              <ArrowLeft className="h-4 w-4 mr-2" />
+              Volver
+            </Button>
+          </div>
           <CardTitle className="text-2xl font-bold text-center">Avanzando</CardTitle>
           <CardDescription className="text-center">
             Ingrese sus credenciales para acceder
@@ -121,6 +127,11 @@ const Login = ({ onLogin }) => {
                 </div>
               )}
             </Button>
+            <div className="text-center">
+              <Button variant="link" onClick={onGoToRegister} className="text-sm">
+                ¿No tienes cuenta? Regístrate aquí
+              </Button>
+            </div>
           </form>
         </CardContent>
       </Card>
