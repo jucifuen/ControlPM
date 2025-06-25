@@ -1,0 +1,232 @@
+import { useState, useEffect } from 'react'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { LogOut, Plus, FolderOpen, Calendar, DollarSign, Users } from 'lucide-react'
+import ProjectForm from './ProjectForm'
+
+const Dashboard = ({ user, token, onLogout }) => {
+  const [projects, setProjects] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [showProjectForm, setShowProjectForm] = useState(false)
+
+  useEffect(() => {
+    fetchProjects()
+  }, [])
+
+  const fetchProjects = async () => {
+    try {
+      const response = await fetch('http://localhost:5000/api/projects', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      })
+
+      const data = await response.json()
+
+      if (response.ok) {
+        setProjects(data.proyectos)
+      } else {
+        setError(data.error || 'Error al cargar proyectos')
+      }
+    } catch (err) {
+      setError('Error de conexión')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleProjectCreated = (newProject) => {
+    setProjects([...projects, newProject])
+    setShowProjectForm(false)
+  }
+
+  const getStatusColor = (status) => {
+    switch (status) {
+      case 'activo':
+        return 'bg-green-100 text-green-800'
+      case 'pausado':
+        return 'bg-yellow-100 text-yellow-800'
+      case 'completado':
+        return 'bg-blue-100 text-blue-800'
+      case 'cancelado':
+        return 'bg-red-100 text-red-800'
+      default:
+        return 'bg-gray-100 text-gray-800'
+    }
+  }
+
+  const canCreateProjects = user.rol === 'administrador' || user.rol === 'pm'
+
+  if (showProjectForm) {
+    return (
+      <ProjectForm
+        token={token}
+        onProjectCreated={handleProjectCreated}
+        onCancel={() => setShowProjectForm(false)}
+      />
+    )
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center">
+              <h1 className="text-xl font-semibold text-gray-900">Avanzando</h1>
+              <Badge variant="secondary" className="ml-3">
+                {user.rol.charAt(0).toUpperCase() + user.rol.slice(1)}
+              </Badge>
+            </div>
+            <div className="flex items-center space-x-4">
+              <span className="text-sm text-gray-700">Hola, {user.nombre}</span>
+              <Button variant="outline" size="sm" onClick={onLogout}>
+                <LogOut className="h-4 w-4 mr-2" />
+                Salir
+              </Button>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Proyectos</CardTitle>
+              <FolderOpen className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{projects.length}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Proyectos Activos</CardTitle>
+              <Calendar className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {projects.filter(p => p.estado === 'activo').length}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Completados</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {projects.filter(p => p.estado === 'completado').length}
+              </div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Presupuesto Total</CardTitle>
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                ${projects.reduce((sum, p) => sum + (p.presupuesto_estimado || 0), 0).toLocaleString()}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Projects Section */}
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-2xl font-bold text-gray-900">Proyectos</h2>
+          {canCreateProjects && (
+            <Button onClick={() => setShowProjectForm(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Nuevo Proyecto
+            </Button>
+          )}
+        </div>
+
+        {error && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {loading ? (
+          <div className="flex justify-center items-center h-64">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {projects.map((project) => (
+              <Card key={project.id} className="hover:shadow-lg transition-shadow">
+                <CardHeader>
+                  <div className="flex justify-between items-start">
+                    <CardTitle className="text-lg">{project.nombre}</CardTitle>
+                    <Badge className={getStatusColor(project.estado)}>
+                      {project.estado}
+                    </Badge>
+                  </div>
+                  <CardDescription>
+                    Cliente: {project.cliente_nombre}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-gray-600">Inicio:</span>
+                      <span>{new Date(project.fecha_inicio).toLocaleDateString()}</span>
+                    </div>
+                    {project.fecha_fin && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Fin:</span>
+                        <span>{new Date(project.fecha_fin).toLocaleDateString()}</span>
+                      </div>
+                    )}
+                    {project.presupuesto_estimado && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-600">Presupuesto:</span>
+                        <span>${project.presupuesto_estimado.toLocaleString()}</span>
+                      </div>
+                    )}
+                  </div>
+                  <Button variant="outline" className="w-full mt-4">
+                    Ver Detalles
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {!loading && projects.length === 0 && (
+          <div className="text-center py-12">
+            <FolderOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">No hay proyectos</h3>
+            <p className="text-gray-600 mb-4">
+              {canCreateProjects 
+                ? 'Comience creando su primer proyecto.'
+                : 'No tiene proyectos asignados actualmente.'
+              }
+            </p>
+            {canCreateProjects && (
+              <Button onClick={() => setShowProjectForm(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Crear Primer Proyecto
+              </Button>
+            )}
+          </div>
+        )}
+      </main>
+    </div>
+  )
+}
+
+export default Dashboard
+
