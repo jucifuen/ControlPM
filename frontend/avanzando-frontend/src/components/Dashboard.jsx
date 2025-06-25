@@ -19,6 +19,8 @@ import {
 } from 'lucide-react'
 import ProjectForm from './ProjectForm'
 import PortfolioDashboard from './PortfolioDashboard'
+import SubscriptionManager from './SubscriptionManager'
+import AIInsights from './AIInsights'
 
 const Dashboard = ({ user, token, onLogout }) => {
   const [projects, setProjects] = useState([])
@@ -221,9 +223,11 @@ const Dashboard = ({ user, token, onLogout }) => {
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Tabs defaultValue="proyectos" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-4">
             <TabsTrigger value="proyectos">Mis Proyectos</TabsTrigger>
             <TabsTrigger value="portfolio">Dashboard Portafolio</TabsTrigger>
+            <TabsTrigger value="ai">IA & Insights</TabsTrigger>
+            <TabsTrigger value="subscription">Suscripción</TabsTrigger>
           </TabsList>
 
           <TabsContent value="proyectos" className="space-y-6">
@@ -360,6 +364,21 @@ const Dashboard = ({ user, token, onLogout }) => {
 
           <TabsContent value="portfolio">
             <PortfolioDashboard user={user} />
+          </TabsContent>
+
+          <TabsContent value="ai">
+            {selectedProject ? (
+              <AIInsights project={selectedProject} token={token} />
+            ) : (
+              <div className="text-center py-12">
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Selecciona un proyecto</h3>
+                <p className="text-gray-500">Elige un proyecto para ver insights de IA</p>
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="subscription">
+            <SubscriptionManager user={user} token={token} />
           </TabsContent>
         </Tabs>
       </div>

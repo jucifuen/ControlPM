@@ -13,6 +13,8 @@ from src.routes.kpis import kpis_bp
 from src.routes.riesgos import riesgos_bp
 from src.routes.recursos import recursos_bp
 from src.routes.portfolio import portfolio_bp
+from src.routes.subscription import subscription_bp
+from src.routes.ai import ai_bp
 
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
 app.config['SECRET_KEY'] = 'asdf#FGSgvasgf$5$WGT'
@@ -26,6 +28,8 @@ app.register_blueprint(kpis_bp, url_prefix='/api')
 app.register_blueprint(riesgos_bp, url_prefix='/api')
 app.register_blueprint(recursos_bp, url_prefix='/api')
 app.register_blueprint(portfolio_bp, url_prefix='/api')
+app.register_blueprint(subscription_bp, url_prefix='/api')
+app.register_blueprint(ai_bp, url_prefix='/api')
 
 # Configurar base de datos
 app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(os.path.dirname(__file__), 'database', 'app.db')}"
@@ -38,6 +42,8 @@ with app.app_context():
     from src.models.kpi import KPI
     from src.models.riesgo import Riesgo
     from src.models.recurso import Recurso
+    from src.models.subscription import Subscription
+    from src.models.ai_prediction import AIPrediction
     db.create_all()
 
 @app.route('/', defaults={'path': ''})
