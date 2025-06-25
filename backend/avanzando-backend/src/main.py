@@ -12,21 +12,22 @@ from src.routes.projects import projects_bp
 from src.routes.kpis import kpis_bp
 from src.routes.riesgos import riesgos_bp
 from src.routes.recursos import recursos_bp
+from src.routes.portfolio import portfolio_bp
 
 app = Flask(__name__, static_folder=os.path.join(os.path.dirname(__file__), 'static'))
 app.config['SECRET_KEY'] = 'asdf#FGSgvasgf$5$WGT'
 
 # Habilitar CORS
 CORS(app)
-
 app.register_blueprint(user_bp, url_prefix='/api')
 app.register_blueprint(auth_bp, url_prefix='/api/auth')
 app.register_blueprint(projects_bp, url_prefix='/api')
-app.register_blueprint(kpis_bp)
-app.register_blueprint(riesgos_bp)
-app.register_blueprint(recursos_bp)
+app.register_blueprint(kpis_bp, url_prefix='/api')
+app.register_blueprint(riesgos_bp, url_prefix='/api')
+app.register_blueprint(recursos_bp, url_prefix='/api')
+app.register_blueprint(portfolio_bp, url_prefix='/api')
 
-# uncomment if you need to use database
+# Configurar base de datos
 app.config['SQLALCHEMY_DATABASE_URI'] = f"sqlite:///{os.path.join(os.path.dirname(__file__), 'database', 'app.db')}"
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db.init_app(app)
