@@ -1,9 +1,14 @@
 import { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Input } from '@/components/ui/input'
+import { DatePickerWithRange } from '@/components/ui/date-range-picker'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line } from 'recharts'
-import { FolderOpen, TrendingUp, AlertTriangle, Users, DollarSign, Calendar, Target } from 'lucide-react'
+import { FolderOpen, TrendingUp, AlertTriangle, Users, DollarSign, Calendar, Target, Filter, Download, RefreshCw } from 'lucide-react'
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8']
 
@@ -20,13 +25,32 @@ export default function PortfolioDashboard({ user }) {
     resourceUtilization: []
   })
 
+  // Estados para filtros
+  const [filters, setFilters] = useState({
+    status: 'all',
+    client: 'all',
+    dateRange: null,
+    searchTerm: '',
+    budgetRange: 'all'
+  })
+
+  const [isLoading, setIsLoading] = useState(false)
+  const [viewMode, setViewMode] = useState('grid') // 'grid' o 'table'
+
   useEffect(() => {
     fetchPortfolioData()
-  }, [])
+  }, [filters])
 
   const fetchPortfolioData = async () => {
+    setIsLoading(true)
     try {
-      const response = await fetch('http://localhost:5000/api/portfolio', {
+      const queryParams = new URLSearchParams()
+      if (filters.status !== 'all') queryParams.append('status', filters.status)
+      if (filters.client !== 'all') queryParams.append('client', filters.client)
+      if (filters.searchTerm) queryParams.append('search', filters.searchTerm)
+      if (filters.budgetRange !== 'all') queryParams.append('budget', filters.budgetRange)
+      
+      const response = await fetch(`http://localhost:5000/api/portfolio?${queryParams}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -37,6 +61,32 @@ export default function PortfolioDashboard({ user }) {
       }
     } catch (error) {
       console.error('Error fetching portfolio data:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleFilterChange = (key, value) => {
+    setFilters(prev => ({ ...prev, [key]: value }))
+  }
+
+  const exportData = async (format) => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/portfolio/export?format=${format}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      })
+      if (response.ok) {
+        const blob = await response.blob()
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `portfolio-report.${format}`
+        a.click()
+      }
+    } catch (error) {
+      console.error('Error exporting data:', error)
     }
   }
 

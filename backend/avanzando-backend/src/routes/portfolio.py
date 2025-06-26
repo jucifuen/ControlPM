@@ -1,173 +1,219 @@
-from flask import Blueprint, jsonify, request
-from src.models.user import db, User
+from flask import Blueprint, jsonify, request, make_response
+from src.middleware.auth import token_required
 from src.models.project import Proyecto
+from src.models.user import User
 from src.models.kpi import KPI
 from src.models.riesgo import Riesgo
 from src.models.recurso import Recurso
-from functools import wraps
-import jwt
-import os
-from sqlalchemy import func
+from datetime import datetime, timedelta
+import json
+import csv
+import io
 
 portfolio_bp = Blueprint('portfolio', __name__)
-
-def token_required(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        token = request.headers.get('Authorization')
-        if not token:
-            return jsonify({'message': 'Token is missing!'}), 401
-        try:
-            token = token.split(' ')[1]
-            data = jwt.decode(token, os.environ.get('SECRET_KEY', 'dev-secret-key'), algorithms=['HS256'])
-            current_user = User.query.get(data['user_id'])
-        except:
-            return jsonify({'message': 'Token is invalid!'}), 401
-        return f(current_user, *args, **kwargs)
-    return decorated
 
 @portfolio_bp.route('/portfolio', methods=['GET'])
 @token_required
 def get_portfolio_data(current_user):
+    """Obtiene datos del portafolio con filtros mejorados"""
     try:
-        # Obtener proyectos según el rol del usuario
-        if current_user.rol.value == 'administrador':
-            projects = Proyecto.query.all()
-        else:
-            projects = Proyecto.query.filter_by(pm_id=current_user.id).all()
+        # Obtener parámetros de filtro
+        status_filter = request.args.get('status', 'all')
+        client_filter = request.args.get('client', 'all')
+        search_term = request.args.get('search', '')
+        budget_filter = request.args.get('budget', 'all')
         
-        # Calcular métricas del portafolio
-        total_projects = len(projects)
-        active_projects = len([p for p in projects if p.estado.value == 'activo'])
-        completed_projects = len([p for p in projects if p.estado.value == 'completado'])
+        # Query base de proyectos
+        query = Proyecto.query
         
-        total_budget = sum([p.presupuesto_estimado or 0 for p in projects])
-        total_spent = sum([p.presupuesto_real or 0 for p in projects])
+        # Aplicar filtros
+        if status_filter != 'all':
+            query = query.filter(Proyecto.estado == status_filter)
         
-        # Obtener KPIs consolidados
+        if client_filter != 'all':
+            query = query.filter(Proyecto.cliente_id == int(client_filter))
+        
+        if search_term:
+            query = query.filter(Proyecto.nombre.ilike(f'%{search_term}%'))
+        
+        if budget_filter != 'all':
+            if budget_filter == 'low':
+                query = query.filter(Proyecto.presupuesto_estimado < 50000)
+            elif budget_filter == 'medium':
+                query = query.filter(Proyecto.presupuesto_estimado.between(50000, 200000))
+            elif budget_filter == 'high':
+                query = query.filter(Proyecto.presupuesto_estimado > 200000)
+        
+        # Obtener proyectos filtrados
+        proyectos = query.all()
+        
+        # Calcular métricas
+        total_projects = len(proyectos)
+        active_projects = len([p for p in proyectos if p.estado == 'activo'])
+        completed_projects = len([p for p in proyectos if p.estado == 'completado'])
+        total_budget = sum([p.presupuesto_estimado or 0 for p in proyectos])
+        total_spent = sum([p.presupuesto_gastado or 0 for p in proyectos])
+        
+        # KPIs resumidos
         kpi_summary = []
-        for project in projects:
-            kpis = KPI.query.filter_by(proyecto_id=project.id).all()
-            for kpi in kpis:
+        for proyecto in proyectos[:5]:  # Top 5 proyectos
+            kpis = KPI.query.filter_by(proyecto_id=proyecto.id).all()
+            if kpis:
+                avg_performance = sum([kpi.valor_actual for kpi in kpis]) / len(kpis)
                 kpi_summary.append({
-                    'proyecto': project.nombre,
-                    'nombre': kpi.nombre,
-                    'valor_actual': kpi.valor_actual,
-                    'valor_objetivo': kpi.valor_objetivo,
-                    'estado': kpi.estado.value
+                    'project_name': proyecto.nombre,
+                    'performance': round(avg_performance, 2),
+                    'kpi_count': len(kpis)
                 })
         
-        # Obtener riesgos activos
+        # Resumen de riesgos
         risk_summary = []
-        for project in projects:
-            risks = Riesgo.query.filter_by(proyecto_id=project.id, activo=True).all()
-            for risk in risks:
-                if risk.estado.value in ['identificado', 'en_mitigacion']:
-                    risk_summary.append({
-                        'proyecto': project.nombre,
-                        'descripcion': risk.descripcion,
-                        'exposicion': risk.calcular_exposicion(),
-                        'estado': risk.estado.value
-                    })
-        
-        # Obtener utilización de recursos
-        resource_utilization = []
-        for project in projects:
-            resources = Recurso.query.filter_by(proyecto_id=project.id, activo=True).all()
-            for resource in resources:
-                resource_utilization.append({
-                    'proyecto': project.nombre,
-                    'nombre': resource.nombre,
-                    'tipo': resource.tipo.value,
-                    'disponibilidad': resource.disponibilidad.value,
-                    'costo_total': resource.costo_total
+        for proyecto in proyectos:
+            riesgos = Riesgo.query.filter_by(proyecto_id=proyecto.id).all()
+            high_risks = len([r for r in riesgos if r.nivel_impacto == 'alto'])
+            if high_risks > 0:
+                risk_summary.append({
+                    'project_name': proyecto.nombre,
+                    'high_risks': high_risks,
+                    'total_risks': len(riesgos)
                 })
         
-        # Preparar datos de proyectos para el frontend
-        projects_data = []
-        for project in projects:
-            # Calcular progreso basado en fases completadas
-            fases_completadas = len([f for f in project.fases if f.estado.value == 'completada'])
-            total_fases = len(project.fases)
-            progreso = (fases_completadas / total_fases * 100) if total_fases > 0 else 0
-            
-            projects_data.append({
-                'id': project.id,
-                'nombre': project.nombre,
-                'descripcion': project.descripcion,
-                'estado': project.estado.value,
-                'presupuesto_estimado': project.presupuesto_estimado,
-                'presupuesto_real': project.presupuesto_real,
-                'progreso': progreso,
-                'cliente_nombre': getattr(project.cliente, 'nombre', 'N/A') if project.cliente else 'N/A'
+        # Utilización de recursos
+        resource_utilization = []
+        recursos = Recurso.query.all()
+        for recurso in recursos[:10]:  # Top 10 recursos
+            proyectos_asignados = len([p for p in proyectos if recurso.id in [r.id for r in p.recursos]])
+            resource_utilization.append({
+                'name': recurso.nombre,
+                'projects_assigned': proyectos_asignados,
+                'utilization': min(100, (proyectos_asignados / 5) * 100)  # Máximo 5 proyectos por recurso
             })
         
-        portfolio_data = {
+        return jsonify({
             'totalProjects': total_projects,
             'activeProjects': active_projects,
             'completedProjects': completed_projects,
             'totalBudget': total_budget,
             'totalSpent': total_spent,
-            'projects': projects_data,
+            'projects': [p.to_dict() for p in proyectos],
             'kpiSummary': kpi_summary,
             'riskSummary': risk_summary,
-            'resourceUtilization': resource_utilization
-        }
-        
-        return jsonify(portfolio_data), 200
+            'resourceUtilization': resource_utilization,
+            'filters_applied': {
+                'status': status_filter,
+                'client': client_filter,
+                'search': search_term,
+                'budget': budget_filter
+            }
+        }), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@portfolio_bp.route('/portfolio/analytics', methods=['GET'])
+@portfolio_bp.route('/portfolio/export', methods=['GET'])
 @token_required
-def get_portfolio_analytics(current_user):
+def export_portfolio_data(current_user):
+    """Exporta datos del portafolio en diferentes formatos"""
     try:
-        # Obtener proyectos según el rol del usuario
-        if current_user.rol.value == 'administrador':
-            projects = Proyecto.query.all()
+        format_type = request.args.get('format', 'csv')
+        
+        # Obtener todos los proyectos
+        proyectos = Proyecto.query.all()
+        
+        if format_type == 'csv':
+            output = io.StringIO()
+            writer = csv.writer(output)
+            
+            # Headers
+            writer.writerow(['ID', 'Nombre', 'Estado', 'Cliente', 'Presupuesto', 'Gastado', 'Progreso', 'Fecha Inicio', 'Fecha Fin'])
+            
+            # Data
+            for proyecto in proyectos:
+                writer.writerow([
+                    proyecto.id,
+                    proyecto.nombre,
+                    proyecto.estado,
+                    proyecto.cliente.nombre if proyecto.cliente else 'N/A',
+                    proyecto.presupuesto_estimado or 0,
+                    proyecto.presupuesto_gastado or 0,
+                    f"{proyecto.progreso_general}%",
+                    proyecto.fecha_inicio.strftime('%Y-%m-%d') if proyecto.fecha_inicio else 'N/A',
+                    proyecto.fecha_fin.strftime('%Y-%m-%d') if proyecto.fecha_fin else 'N/A'
+                ])
+            
+            output.seek(0)
+            response = make_response(output.getvalue())
+            response.headers['Content-Type'] = 'text/csv'
+            response.headers['Content-Disposition'] = 'attachment; filename=portfolio-report.csv'
+            return response
+            
+        elif format_type == 'json':
+            data = {
+                'export_date': datetime.now().isoformat(),
+                'total_projects': len(proyectos),
+                'projects': [p.to_dict() for p in proyectos]
+            }
+            
+            response = make_response(json.dumps(data, indent=2))
+            response.headers['Content-Type'] = 'application/json'
+            response.headers['Content-Disposition'] = 'attachment; filename=portfolio-report.json'
+            return response
+            
         else:
-            projects = Proyecto.query.filter_by(pm_id=current_user.id).all()
+            return jsonify({'error': 'Formato no soportado'}), 400
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@portfolio_bp.route('/portfolio/clients', methods=['GET'])
+@token_required
+def get_portfolio_clients(current_user):
+    """Obtiene lista de clientes para filtros"""
+    try:
+        clientes = User.query.filter_by(rol='cliente').all()
+        return jsonify({
+            'clients': [{'id': c.id, 'name': c.nombre} for c in clientes]
+        }), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@portfolio_bp.route('/portfolio/metrics', methods=['GET'])
+@token_required
+def get_portfolio_metrics(current_user):
+    """Obtiene métricas avanzadas del portafolio"""
+    try:
+        # Métricas de tiempo
+        now = datetime.now()
+        last_month = now - timedelta(days=30)
         
-        # Análisis temporal de proyectos
-        monthly_data = db.session.query(
-            func.strftime('%Y-%m', Proyecto.fecha_inicio).label('month'),
-            func.count(Proyecto.id).label('count')
-        ).filter(Proyecto.id.in_([p.id for p in projects])).group_by('month').all()
+        proyectos_nuevos = Proyecto.query.filter(Proyecto.fecha_creacion >= last_month).count()
+        proyectos_completados_mes = Proyecto.query.filter(
+            Proyecto.estado == 'completado',
+            Proyecto.fecha_actualizacion >= last_month
+        ).count()
         
-        # Análisis de presupuesto por proyecto
-        budget_analysis = []
-        for project in projects:
-            if project.presupuesto_estimado:
-                variance = ((project.presupuesto_real or 0) - project.presupuesto_estimado) / project.presupuesto_estimado * 100
-                budget_analysis.append({
-                    'proyecto': project.nombre,
-                    'presupuestado': project.presupuesto_estimado,
-                    'gastado': project.presupuesto_real or 0,
-                    'varianza': variance
-                })
+        # Métricas de presupuesto
+        total_presupuesto = Proyecto.query.with_entities(
+            Proyecto.presupuesto_estimado
+        ).filter(Proyecto.presupuesto_estimado.isnot(None)).all()
         
-        # Top riesgos por exposición
-        top_risks = []
-        for project in projects:
-            risks = Riesgo.query.filter_by(proyecto_id=project.id, activo=True).all()
-            for risk in risks:
-                top_risks.append({
-                    'proyecto': project.nombre,
-                    'descripcion': risk.descripcion,
-                    'exposicion': risk.calcular_exposicion()
-                })
+        total_gastado = Proyecto.query.with_entities(
+            Proyecto.presupuesto_gastado
+        ).filter(Proyecto.presupuesto_gastado.isnot(None)).all()
         
-        top_risks.sort(key=lambda x: x['exposicion'], reverse=True)
-        top_risks = top_risks[:10]  # Top 10 riesgos
+        budget_efficiency = 0
+        if total_presupuesto and total_gastado:
+            total_budget_sum = sum([p[0] for p in total_presupuesto])
+            total_spent_sum = sum([p[0] for p in total_gastado])
+            budget_efficiency = (total_spent_sum / total_budget_sum) * 100 if total_budget_sum > 0 else 0
         
-        analytics_data = {
-            'monthlyProjects': [{'month': m[0], 'count': m[1]} for m in monthly_data],
-            'budgetAnalysis': budget_analysis,
-            'topRisks': top_risks
-        }
-        
-        return jsonify(analytics_data), 200
+        return jsonify({
+            'new_projects_this_month': proyectos_nuevos,
+            'completed_projects_this_month': proyectos_completados_mes,
+            'budget_efficiency': round(budget_efficiency, 2),
+            'average_project_duration': 45,  # Placeholder - calcular real
+            'resource_utilization_avg': 75   # Placeholder - calcular real
+        }), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
