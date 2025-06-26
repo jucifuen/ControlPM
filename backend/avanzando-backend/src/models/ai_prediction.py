@@ -19,7 +19,7 @@ class AIPrediction(db.Model):
     __tablename__ = 'ai_predictions'
     
     id = db.Column(db.Integer, primary_key=True)
-    project_id = db.Column(db.Integer, db.ForeignKey('projects.id'), nullable=False)
+    project_id = db.Column(db.Integer, db.ForeignKey('proyectos.id'), nullable=False)
     prediction_type = db.Column(db.Enum(PredictionType), nullable=False)
     status = db.Column(db.Enum(PredictionStatus), nullable=False, default=PredictionStatus.PENDING)
     input_data = db.Column(db.Text)  # JSON con datos de entrada

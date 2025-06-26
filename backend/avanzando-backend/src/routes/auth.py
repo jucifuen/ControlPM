@@ -14,8 +14,24 @@ def register():
         data = request.get_json()
         
         # Validar datos requeridos
-        if not data or not data.get('nombre') or not data.get('email') or not data.get('password'):
-            return jsonify({'error': 'Nombre, email y contraseña son requeridos'}), 400
+        if not data:
+            return jsonify({'error': 'Datos requeridos'}), 400
+            
+        if not data.get('nombre'):
+            return jsonify({'error': 'Nombre es requerido'}), 400
+            
+        if not data.get('email'):
+            return jsonify({'error': 'Email es requerido'}), 400
+            
+        if not data.get('password'):
+            return jsonify({'error': 'Contraseña es requerida'}), 400
+        
+        # Validar rol
+        rol_str = data.get('rol', 'recurso')
+        try:
+            rol = UserRole(rol_str)
+        except ValueError:
+            return jsonify({'error': 'Rol inválido'}), 400
         
         # Verificar si el usuario ya existe
         existing_user = User.query.filter_by(email=data['email']).first()
@@ -26,7 +42,7 @@ def register():
         new_user = User(
             nombre=data['nombre'],
             email=data['email'],
-            rol=UserRole(data.get('rol', 'recurso')),
+            rol=rol,
             cliente_id=data.get('cliente_id')
         )
         new_user.set_password(data['password'])
@@ -35,7 +51,7 @@ def register():
         db.session.commit()
         
         return jsonify({
-            'message': 'Usuario registrado exitosamente',
+            'message': 'Usuario creado exitosamente',
             'user': new_user.to_dict()
         }), 201
         
