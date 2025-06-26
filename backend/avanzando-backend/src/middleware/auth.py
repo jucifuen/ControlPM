@@ -4,51 +4,57 @@ import jwt
 from src.models.user import User
 
 def token_required(f):
+    """Decorador para requerir autenticación JWT"""
     @wraps(f)
     def decorated(*args, **kwargs):
         token = None
         
-        # Obtener token del header
-        auth_header = request.headers.get('Authorization')
-        if auth_header and auth_header.startswith('Bearer '):
-            token = auth_header.split(' ')[1]
+        # Obtener token del header Authorization
+        if 'Authorization' in request.headers:
+            auth_header = request.headers['Authorization']
+            try:
+                token = auth_header.split(" ")[1]  # Bearer <token>
+            except IndexError:
+                return jsonify({'error': 'Token malformado'}), 401
         
         if not token:
-            return jsonify({'error': 'Token de acceso requerido'}), 401
+            return jsonify({'error': 'Token requerido'}), 401
         
         try:
             # Decodificar token
-            SECRET_KEY = current_app.config.get('SECRET_KEY', 'asdf#FGSgvasgf$5$WGT')
-            data = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-            current_user = User.query.get(data['user_id'])
+            data = jwt.decode(token, current_app.config['SECRET_KEY'], algorithms=['HS256'])
+            current_user = User.query.filter_by(id=data['user_id']).first()
             
-            if not current_user or not current_user.activo:
-                return jsonify({'error': 'Token inválido'}), 401
+            if not current_user:
+                return jsonify({'error': 'Usuario no encontrado'}), 401
                 
         except jwt.ExpiredSignatureError:
             return jsonify({'error': 'Token expirado'}), 401
         except jwt.InvalidTokenError:
             return jsonify({'error': 'Token inválido'}), 401
-        except Exception as e:
-            return jsonify({'error': 'Error de autenticación'}), 401
         
         return f(current_user, *args, **kwargs)
     
     return decorated
 
-def get_current_user():
-    """Helper para obtener el usuario actual desde el token"""
-    auth_header = request.headers.get('Authorization')
-    if not auth_header or not auth_header.startswith('Bearer '):
-        return None
+def admin_required(f):
+    """Decorador para requerir rol de administrador"""
+    @wraps(f)
+    def decorated(current_user, *args, **kwargs):
+        if current_user.rol.value != 'administrador':
+            return jsonify({'error': 'Acceso denegado. Se requiere rol de administrador'}), 403
+        return f(current_user, *args, **kwargs)
     
-    token = auth_header.split(' ')[1]
+    return decorated
+
+def pm_required(f):
+    """Decorador para requerir rol de PM o superior"""
+    @wraps(f)
+    def decorated(current_user, *args, **kwargs):
+        allowed_roles = ['administrador', 'pm']
+        if current_user.rol.value not in allowed_roles:
+            return jsonify({'error': 'Acceso denegado. Se requiere rol de PM o superior'}), 403
+        return f(current_user, *args, **kwargs)
     
-    try:
-        from flask import current_app
-        SECRET_KEY = current_app.config.get('SECRET_KEY', 'asdf#FGSgvasgf$5$WGT')
-        data = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-        return User.query.get(data['user_id'])
-    except:
-        return None
+    return decorated
 

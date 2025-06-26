@@ -43,7 +43,7 @@ class TestAuthE2E:
         assert 'user' in data
         assert data['user']['email'] == 'e2e@example.com'
         
-        return data['token']  # Retornar token para otras pruebas
+        # No retornar nada para evitar warning de pytest
     
     def test_register_duplicate_email(self, client):
         """Prueba registro con email duplicado"""
@@ -66,7 +66,7 @@ class TestAuthE2E:
                              data=json.dumps(register_data),
                              content_type='application/json')
         
-        assert response.status_code == 400
+        assert response.status_code == 409  # Conflict, no Bad Request
         data = response.get_json()
         assert 'error' in data
     

@@ -10,12 +10,18 @@ def get_users():
 
 @user_bp.route('/users', methods=['POST'])
 def create_user():
-    
     data = request.json
-    user = User(username=data['username'], email=data['email'])
+    
+    # Crear usuario cliente por defecto
+    user = User(
+        nombre=data['nombre'], 
+        email=data.get('email', f"{data['nombre'].lower().replace(' ', '.')}@cliente.com"),
+        rol='recurso'  # Usar rol válido del enum
+    )
+    user.set_password('defaultpassword123')  # Password por defecto para clientes
     db.session.add(user)
     db.session.commit()
-    return jsonify(user.to_dict()), 201
+    return jsonify({'user': user.to_dict()}), 201
 
 @user_bp.route('/users/<int:user_id>', methods=['GET'])
 def get_user(user_id):

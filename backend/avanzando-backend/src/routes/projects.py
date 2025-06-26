@@ -1,32 +1,10 @@
 from flask import Blueprint, request, jsonify
 from src.models.user import db, User, UserRole
 from src.models.project import Proyecto, Fase, TipoFase, EstadoProyecto
-import jwt
+from src.middleware.auth import token_required, pm_required
 from datetime import datetime
-import os
 
 projects_bp = Blueprint('projects', __name__)
-
-SECRET_KEY = os.environ.get('SECRET_KEY', 'asdf#FGSgvasgf$5$WGT')
-
-def verify_token():
-    """Función auxiliar para verificar el token JWT"""
-    auth_header = request.headers.get('Authorization')
-    if not auth_header or not auth_header.startswith('Bearer '):
-        return None, jsonify({'error': 'Token requerido'}), 401
-    
-    token = auth_header.split(' ')[1]
-    
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=['HS256'])
-        user = User.query.get(payload['user_id'])
-        if not user or not user.activo:
-            return None, jsonify({'error': 'Usuario no encontrado'}), 404
-        return user, None, None
-    except jwt.ExpiredSignatureError:
-        return None, jsonify({'error': 'Token expirado'}), 401
-    except jwt.InvalidTokenError:
-        return None, jsonify({'error': 'Token inválido'}), 401
 
 def create_default_phases(proyecto_id):
     """Crear las fases por defecto para un proyecto"""
@@ -47,17 +25,14 @@ def create_default_phases(proyecto_id):
         db.session.add(fase)
 
 @projects_bp.route('/projects', methods=['GET'])
-def get_projects():
+@token_required
+def get_projects(current_user):
     try:
-        user, error_response, status_code = verify_token()
-        if error_response:
-            return error_response, status_code
-        
         # Filtrar proyectos según el rol del usuario
-        if user.rol == UserRole.ADMINISTRADOR or user.rol == UserRole.PM:
+        if current_user.rol == UserRole.ADMINISTRADOR or current_user.rol == UserRole.PM:
             proyectos = Proyecto.query.all()
-        elif user.rol == UserRole.CLIENTE:
-            proyectos = Proyecto.query.filter_by(cliente_id=user.cliente_id).all()
+        elif current_user.rol == UserRole.CLIENTE:
+            proyectos = Proyecto.query.filter_by(cliente_id=current_user.cliente_id).all()
         else:
             # Para recursos, mostrar proyectos donde están asignados (implementar lógica más adelante)
             proyectos = []
@@ -70,16 +45,10 @@ def get_projects():
         return jsonify({'error': str(e)}), 500
 
 @projects_bp.route('/projects', methods=['POST'])
-def create_project():
+@token_required
+@pm_required
+def create_project(current_user):
     try:
-        user, error_response, status_code = verify_token()
-        if error_response:
-            return error_response, status_code
-        
-        # Solo administradores y PMs pueden crear proyectos
-        if user.rol not in [UserRole.ADMINISTRADOR, UserRole.PM]:
-            return jsonify({'error': 'No tiene permisos para crear proyectos'}), 403
-        
         data = request.get_json()
         
         if not data or not data.get('nombre') or not data.get('cliente_id'):
