@@ -19,7 +19,7 @@ def get_subscription(current_user):
             db.session.add(subscription)
             db.session.commit()
         
-        return jsonify(subscription.to_dict()), 200
+        return jsonify({'subscription': subscription.to_dict()}), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -49,7 +49,7 @@ def upgrade_subscription(current_user):
         db.session.commit()
         
         return jsonify({
-            'message': f'Successfully upgraded to {plan_type}',
+            'message': 'Suscripción actualizada exitosamente',
             'subscription': subscription.to_dict()
         }), 200
         
@@ -286,6 +286,40 @@ def get_ai_features_access(current_user):
             'access': ai_access,
             'features': features,
             'plan': subscription.plan_type.value
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@subscription_bp.route('/subscription/check-limits', methods=['GET'])
+@token_required
+def check_limits_query(current_user):
+    """Verifica límites usando parámetros de query"""
+    try:
+        action = request.args.get('action')
+        current_count = int(request.args.get('current_count', 0))
+        
+        subscription = Subscription.query.filter_by(user_id=current_user.id).first()
+        
+        if not subscription:
+            subscription = Subscription(user_id=current_user.id, plan_type=PlanType.FREE)
+            db.session.add(subscription)
+            db.session.commit()
+        
+        allowed = False
+        message = ""
+        
+        if action == 'create_project':
+            allowed = subscription.can_create_project(current_count)
+            if not allowed:
+                limits = subscription.get_limits()
+                message = f"Has alcanzado el límite de {limits['max_projects']} proyectos."
+        
+        return jsonify({
+            'allowed': allowed,
+            'message': message,
+            'current_plan': subscription.plan_type.value
         }), 200
         
     except Exception as e:
