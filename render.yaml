@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: avanzando-frontend
+    env: docker
+    plan: free
+    autoDeploy: true
+
+  - type: web
+    name: avanzando-backend
+    env: docker
+    plan: free
+    autoDeploy: true
+
+  - type: pserv
+    name: avanzando-postgres
+    env: docker
+    plan: free
+    autoDeploy: true
+
+  - type: pserv
+    name: avanzando-redis
+    env: docker
+    plan: free
+    autoDeploy: true

@@ -1,0 +1,75 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: avanzando-postgres
+    environment:
+      POSTGRES_DB: avanzando_db
+      POSTGRES_USER: avanzando_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - avanzando-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: avanzando-redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - avanzando-network
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend/avanzando-backend
+      dockerfile: Dockerfile
+    container_name: avanzando-backend
+    environment:
+      - FLASK_ENV=production
+      - DATABASE_URL=postgresql://avanzando_user:${POSTGRES_PASSWORD}@postgres:5432/avanzando_db
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - CORS_ORIGINS=${CORS_ORIGINS}
+    volumes:
+      - ./backend/avanzando-backend/uploads:/app/uploads
+    ports:
+      - "5000:5000"
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - avanzando-network
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend/avanzando-frontend
+      dockerfile: Dockerfile
+      args:
+        - REACT_APP_API_URL=${REACT_APP_API_URL}
+        - REACT_APP_ENV=production
+    container_name: avanzando-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - avanzando-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  avanzando-network:
+    driver: bridge
