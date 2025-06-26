@@ -2,26 +2,9 @@ from flask import Blueprint, jsonify, request
 from src.models.user import db, User
 from src.models.subscription import Subscription, PlanType, SubscriptionStatus
 from src.models.project import Proyecto
-from functools import wraps
-import jwt
-import os
+from src.middleware.auth import token_required
 
 subscription_bp = Blueprint('subscription', __name__)
-
-def token_required(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        token = request.headers.get('Authorization')
-        if not token:
-            return jsonify({'message': 'Token is missing!'}), 401
-        try:
-            token = token.split(' ')[1]
-            data = jwt.decode(token, os.environ.get('SECRET_KEY', 'dev-secret-key'), algorithms=['HS256'])
-            current_user = User.query.get(data['user_id'])
-        except:
-            return jsonify({'message': 'Token is invalid!'}), 401
-        return f(current_user, *args, **kwargs)
-    return decorated
 
 @subscription_bp.route('/subscription', methods=['GET'])
 @token_required
@@ -240,6 +223,70 @@ def get_available_plans():
         }
         
         return jsonify(plans), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@subscription_bp.route('/subscription/history', methods=['GET'])
+@token_required
+def get_subscription_history(current_user):
+    """Obtiene el historial de suscripciones del usuario"""
+    try:
+        subscription = Subscription.query.filter_by(user_id=current_user.id).first()
+        
+        if not subscription:
+            return jsonify({'history': []}), 200
+        
+        # Por ahora retornamos un historial básico
+        history = [
+            {
+                'date': subscription.created_at.isoformat() if subscription.created_at else None,
+                'action': 'subscription_created',
+                'plan': subscription.plan_type.value,
+                'status': subscription.status.value
+            }
+        ]
+        
+        if subscription.upgraded_at:
+            history.append({
+                'date': subscription.upgraded_at.isoformat(),
+                'action': 'plan_upgraded',
+                'plan': subscription.plan_type.value,
+                'status': subscription.status.value
+            })
+        
+        return jsonify({'history': history}), 200
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@subscription_bp.route('/subscription/ai-features', methods=['GET'])
+@token_required
+def get_ai_features_access(current_user):
+    """Verifica el acceso a funcionalidades de IA"""
+    try:
+        subscription = Subscription.query.filter_by(user_id=current_user.id).first()
+        
+        if not subscription:
+            subscription = Subscription(user_id=current_user.id, plan_type=PlanType.FREE)
+            db.session.add(subscription)
+            db.session.commit()
+        
+        ai_access = subscription.can_use_ai_features()
+        
+        features = {
+            'ai_predictions': ai_access,
+            'ai_insights': ai_access,
+            'ai_recommendations': ai_access,
+            'advanced_analytics': subscription.can_use_advanced_analytics()
+        }
+        
+        return jsonify({
+            'access': ai_access,
+            'features': features,
+            'plan': subscription.plan_type.value
+        }), 200
         
     except Exception as e:
         return jsonify({'error': str(e)}), 500

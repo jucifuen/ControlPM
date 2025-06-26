@@ -12,7 +12,7 @@ def client():
     """Fixture para cliente de pruebas Flask"""
     app.config['TESTING'] = True
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
-    app.config['SECRET_KEY'] = 'test-secret-key'
+    app.config['SECRET_KEY'] = 'asdf#FGSgvasgf$5$WGT'  # Usar la misma SECRET_KEY que main.py
     
     with app.test_client() as client:
         with app.app_context():
