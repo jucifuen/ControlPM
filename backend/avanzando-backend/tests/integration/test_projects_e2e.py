@@ -6,12 +6,15 @@ from src.models.user import User, UserRole, db
 class TestProjectsE2E:
     """Pruebas End-to-End para las APIs de proyectos"""
     
-    def setup_user_and_token(self, client):
+    def setup_user_and_token(self, client, test_name="default"):
         """Helper para crear usuario administrador, cliente y obtener token"""
+        # Usar email único basado en el nombre de la prueba
+        unique_email = f'admin_projects_{test_name}@example.com'
+        
         # Registrar usuario administrador
         register_admin_data = {
-            'nombre': 'Admin Projects Test',
-            'email': 'admin_projects@example.com',
+            'nombre': f'Admin Projects Test {test_name}',
+            'email': unique_email,
             'password': 'password123',
             'rol': 'administrador'
         }
@@ -21,7 +24,7 @@ class TestProjectsE2E:
         
         # Login de usuario administrador
         login_admin_data = {
-            'email': 'admin_projects@example.com',
+            'email': unique_email,
             'password': 'password123'
         }
         response = client.post('/api/auth/login',
@@ -31,7 +34,7 @@ class TestProjectsE2E:
 
         # Crear cliente usando el token del administrador
         cliente_data = {
-            'nombre': 'Cliente E2E',
+            'nombre': f'Cliente E2E {test_name}',
             'sector': 'Tecnología'
         }
         response = client.post('/api/users',
@@ -45,7 +48,7 @@ class TestProjectsE2E:
     
     def test_create_project_flow(self, client):
         """Prueba el flujo completo de creación de proyecto"""
-        token, cliente_id = self.setup_user_and_token(client)
+        token, cliente_id = self.setup_user_and_token(client, "create_project")
         headers = {"Authorization": f"Bearer {token}"}
         
         # Crear proyecto
@@ -74,7 +77,7 @@ class TestProjectsE2E:
     
     def test_get_projects(self, client):
         """Prueba obtener lista de proyectos"""
-        token, _ = self.setup_user_and_token(client)
+        token, _ = self.setup_user_and_token(client, "get_projects")
     
     def test_get_project_by_id(self, client):
         """Prueba obtener proyecto específico por ID"""
